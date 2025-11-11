@@ -1,0 +1,215 @@
+#!/usr/bin/env ysh
+# Weird name, provides 'log' and 'die'
+#source --builtin osh/two.sh
+use ./ctx.ysh
+
+func parse(filename) {
+  read --all (&s) < $filename
+  var b = parseCommand(s)
+  return (b)
+}
+
+func evalBlock(block) {
+  if (type(block) !== 'Command') {
+    error "Wrong type. need a Command" (code=3)
+  }
+  _eval (&out) {
+    call eval(block)
+  }
+  return (out)
+}
+
+proc _hayproc (...args;self, ...args2;;block=null) {
+  # not self.parent! current target!
+  if (self.parent is not haystack[-1]) {
+    error "$[self.name] is not allowed inside node $[haystack[-1].name]"
+  }
+  if (block is null) {
+    error "$[self.name] requires a block argument" (code=2)
+  }
+  var out = block.sourceCode()
+  setvar out.type = self.name
+  setvar out.args = args ++ args2
+
+  ctx emit children (out)
+}
+
+proc Package (name;...args;;block) {
+  # not self.parent! current target!
+  #if (self.parent is not haystack[-1]) {
+  #  error "$[self.name] is not allowed inside node $[haystack[-1].name]"
+  #}
+  #call haystack->append(self)
+  var out_ = {
+    name: name,
+    args: args
+  }
+  var attrs
+  var c_ = {}
+  try {
+    ctx push (c_) {
+        setvar attrs = io->evalToDict(block)
+    }
+  }
+  if (_error.code !== 0) {
+    return $[_error.code]
+  }
+  setvar out_.attrs = attrs
+  setvar out_.lib = c_=>get("lib", [[]])[0] # TODO: flatten
+  setvar out_.build = c_=>get("build", null)
+  var _x = {}
+  setvar _x[name] = out_
+  ctx set (_x)
+  call setVar(name, out_, global=true)
+}
+
+proc node (node, ...name;;;block=null) {
+  define $node (haystack[-1])
+  try {
+    $node @name (;;block)
+  }
+  return $[_error.code]
+  #call io->eval(^($node @name (;;block);), vars=haystack[-1].definitions)
+}
+
+# TODO: only expose for `Package`
+proc lib (...files) {
+  ctx emit lib (files)
+  #ctx emit children (files)
+  #setglobal lib = files
+}
+
+proc build (;;;block) {
+  ctx set ({build: block})
+  #ctx emit children (files)
+  #setglobal lib = files
+}
+
+proc provides (...files) {
+  ctx emit provides (files)
+  #ctx emit children (files)
+  #setglobal lib = files
+}
+
+proc deps (...files) {
+  ctx emit deps (files)
+  #ctx emit children (files)
+  #setglobal lib = files
+}
+
+#var _hayNodeProto = Object(null, {__invoke__:_haynode})
+var _hayProcProto = Object(null, {__invoke__:_hayproc})
+var root = Object(null, {name: 'root', definitions: {}, parent:null})
+
+setglobal haystack = [root]
+
+#setvar parent.definitions[names[0]] = Object(_hayProcProto, {name:names[0], definitions: {}, parent: parent})
+
+
+proc define (...definitions; parent=root) {
+  if (len(definitions) < 1) {
+    echo "need at least 1 argument" >&2
+    return 2
+  }
+
+  for definition in (definitions) {
+    if (definition === '--') {
+      continue
+    }
+    var names = definition=>split('/', count=1)
+    if (names[0] not in parent.definitions) {
+      if (definition=>upper() === definition) {
+        setvar parent.definitions[names[0]] = Object(_hayProcProto, {name:names[0], definitions: {}, parent: parent})
+      } else {
+        setvar parent.definitions[names[0]] = Object(_hayNodeProto, {name:names[0], definitions: {}, parent: parent})
+      }
+      if (parent is haystack[-1]) {
+        # put it in current namespace if we're in root
+        call setVar(names[0], parent.definitions[names[0]], global=true)
+	# doesnt work because names and parent are missing in the frame...
+        #var block = ^(call setVar(names[0], parent.definitions[names[0]], global=true);)
+	# this would allow top-level hay
+	#var frame = vm.getFrame(-2)
+	#call io->evalInFrame(block, frame)
+
+      }
+    }
+    if (len(names) === 2) {
+      define $[names[1]] (parent.definitions[names[0]])
+    }
+  }
+}
+
+proc pp (;_node=haystack[-1], _level=0) {
+# (HayNode
+#   children:{
+#     a
+#     (HayNode children:{})
+#     b                                                    (HayNode children:{})
+#     c
+#     (HayNode children:{})                              }
+# )
+  var i = ''
+  for _ in (0..<_level) {
+    setvar i = i ++ ' '
+  }
+  if (_node is not root) {
+    write "$i$[_node.name]"
+  }
+  write  --end '' "${i}(HayNode"
+  if (len(_node.definitions) > 0) {
+    write '' "  ${i}children: {"
+    for name, o in (_node.definitions) {
+      pp (o, _level+4)
+    }
+    write "$i  }"
+  } else {
+    write  --end '' "children: {}"
+  }
+  write ")"
+}
+
+setglobal evalLevel = 0
+proc _eval (;out;;block=null) {
+  if (evalLevel > 0 ) {
+    echo "Can't nest hay eval!" >&2
+    return 127
+  }
+  if (block is null) {
+    ctx get (out)
+  } else {
+    var o = { source: null, children: [] }
+    var b = ^(call io->eval(block, vars=haystack[-1].definitions);)
+    setglobal evalLevel += 1
+    try {
+      ctx push (o;;b)
+    }
+    call out->setValue(o)
+    setglobal evalLevel -= 1
+    if (_error.code !== 0) {
+      return $[_error.code]
+    }
+  }
+}
+
+proc reset (;node=root) {
+  # let the GC take care?
+  for name, child in (node.definitions) {
+    reset (child)
+    # delete from toplevel
+    if (node is root) {
+      unset $[child.name]
+    }
+    call node.definitions->erase(name)
+  }
+}
+
+var __provide__ = :| eval reset pp node parse evalBlock |
+
+if is-main {
+  var code = $(cat $[ARGV[0]])
+  var block = parseCommand(code)
+  call io->eval(block)
+  _eval (&h)
+  = h
+}

@@ -1,0 +1,39 @@
+# initialize with an empty "toplevel" stack	
+var contextStack = [{}]
+
+proc push (;context;;block) {
+  if (type(context) !== 'Dict') {
+    error "Expected context to be a Dict" (code=3)
+  }
+
+  call contextStack->append(context)
+  try {
+    call io->eval(block, in_captured_frame=true)
+  }
+  call contextStack->pop()
+  return $[_error.code]
+}
+
+proc set (;named) {
+  var context = contextStack[-1]
+  for k, v in (named) {
+    setvar context[k] = v
+  }
+}
+
+# required for toplevel
+proc get (;out) {
+  # top stack should never be popped
+  assert [len(contextStack) > 0]
+  call out->setValue(contextStack[-1])
+}
+
+proc emit (field; item;) {
+  var context = contextStack[-1]
+  if (field not in context) {
+    setvar context[field] = []
+  }
+  call context[field]->append(item)
+}
+
+var __provide__ = :| push set emit get |

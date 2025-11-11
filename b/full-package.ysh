@@ -1,0 +1,7 @@
+Package b {
+  deps a
+  provides b
+  build {
+    ./build.sh
+  }
+}

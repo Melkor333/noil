@@ -1,0 +1,4 @@
+Package c {
+  deps b
+  provides c
+}
