@@ -1,0 +1,5 @@
+#!/usr/bin/env ysh
+
+for p in packages/* {
+  PackageFile $(basename $p) $p/package.ysh
+}

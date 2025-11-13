@@ -1,12 +1,34 @@
 #!/usr/bin/env ysh
 # Weird name, provides 'log' and 'die'
 #source --builtin osh/two.sh
-use ./ctx.ysh
+use $LIB_YSH/args.ysh --pick parser parseArgs
+use $_this_dir/ctx.ysh
 
 func parse(filename) {
   read --all (&s) < $filename
   var b = parseCommand(s)
   return (b)
+}
+
+func flatten(arr) {
+  var out = []
+  if (type(arr) !== 'List') {
+    return ([arr])
+  }
+  for i in (arr) {
+    if (type(arr) === 'List') {
+      call out->extend(flatten(i))
+    } else {
+      call out->append(i)
+    }
+  }
+  return (out)
+}
+
+func combine(out, input) {
+  for k, v in (input) {
+    setvar out[k] = v
+  }
 }
 
 func evalBlock(block) {
@@ -55,12 +77,11 @@ proc Package (name;...args;;block) {
     return $[_error.code]
   }
   setvar out_.attrs = attrs
-  setvar out_.lib = c_=>get("lib", [[]])[0] # TODO: flatten
+  setvar out_.lib = c_=>get("lib", [[]])=>flatten()
   setvar out_.build = c_=>get("build", null)
-  var _x = {}
-  setvar _x[name] = out_
-  ctx set (_x)
-  call setVar(name, out_, global=true)
+  setvar out_.deps = c_=>get("deps", [])=>flatten()
+  ctx set (out_)
+  #call setVar(name, out_, global=true)
 }
 
 proc node (node, ...name;;;block=null) {
@@ -83,6 +104,18 @@ proc build (;;;block) {
   ctx set ({build: block})
   #ctx emit children (files)
   #setglobal lib = files
+}
+
+setglobal packages = {}
+
+proc PackageFile (name, file) {
+  var b = ^(
+    var block_ = parseCommand($(cat $file))
+    Package $name (;;block_)
+  )
+  var x = {}
+  setvar x[name] = b
+  ctx set (x)
 }
 
 proc provides (...files) {
@@ -206,10 +239,66 @@ proc reset (;node=root) {
 
 var __provide__ = :| eval reset pp node parse evalBlock |
 
-if is-main {
-  var code = $(cat $[ARGV[0]])
+func parseFile(io, file) {
+  var code = $(cat $file)
   var block = parseCommand(code)
   call io->eval(block)
-  _eval (&h)
-  = h
+  _eval (&t)
+  return (t)
+}
+
+func resolveDeps(tree, package) {
+  if (type(tree[package]) === 'Command') {
+    echo parse $package
+    #setvar tree[package] = io->eval(tree[package], to_dict=true)
+    _eval (&p;;tree[package])
+    setvar tree[package] = p
+  }
+  var deps = [p]
+  for dep in (p=>get('deps', [])) {
+    echo resolving dep $dep
+    call deps->extend(resolveDeps(tree, dep))
+  }
+  return (deps)
+}
+
+# CLI
+# ==============================================================================
+
+proc parse {
+  if (arg.file is not null) {
+    var file = arg.file
+  } else {
+    setvar file = "./definition.ysh"
+  }
+  var tree = parseFile(io, file)
+  = tree
+}
+
+proc _deps {
+  parser (&spec) {
+    arg package (help="the packagename to find the deps for")
+  }
+  call arg=>combine(parseArgs(spec, ARGV))
+  if (arg.file is not null) {
+    var file = ARGV[0]
+  } else {
+    setvar file = "./definition.ysh"
+  }
+  var tree = parseFile(io, file)
+  var deps = resolveDeps(tree, arg.package)
+  #_eval (tree;;arg.package)
+  = deps
+}
+
+parser (&spec) {
+  arg command (help="the command to be executed", default="parse")
+  flag -v --verbose
+  flag -f --file (Str)
+  rest rest
+}
+setglobal arg = parseArgs(spec, ARGV)
+
+if is-main {
+  runproc $[arg.command] @[arg.rest]
 }
