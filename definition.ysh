@@ -1,5 +1,6 @@
 #!/usr/bin/env ysh
 
 for p in packages/* {
-  PackageFile $(basename $p) $p/package.ysh
+  DerivationFile $(basename $p) $p/package.ysh
 }
+DerivationFile hello zb-demo/hello.ysh

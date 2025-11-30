@@ -1,0 +1,20 @@
+
+#!/usr/bin/env ysh
+
+# A very cheap file store using `mktemp`
+# useful for prototyping/testing
+if test -z $[ENV=>get("NOIL_TMPSTORE","")] {
+  if ! test -f ~/.NOIL_TMPSTORE {
+    echo $(realpath $(mktemp -d NOIL_TMPDIR.XXX)) > ~/.NOIL_TMPSTORE
+  }
+  setglobal ENV.NOIL_TMPSTORE=$(cat ~/.NOIL_TMPSTORE)
+  setglobal NOIL_TMPSTORE=$(cat ~/.NOIL_TMPSTORE)
+  mkdir -p $NOIL_TMPSTORE
+}
+
+proc path (filename) {
+  cp -r -- $filename $NOIL_TMPSTORE/$filename
+  write $NOIL_TMPSTORE/$filename
+}
+
+var __provide__ = :| path |

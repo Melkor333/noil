@@ -1,14 +1,18 @@
 set -ex
 
 ./noil.ysh parse
-./noil.ysh _deps a
-./noil.ysh _deps b
-./noil.ysh _deps c
 cd packages/a
 ../../noil.ysh parse
 cd ../b
 ../../noil.ysh parse
 cd ../c
 ../../noil.ysh parse
+
+cd ../..
+./noil.ysh _deps a
+./noil.ysh _deps b
+./noil.ysh _deps c
+
+./noil.ysh _deps hello
 
 echo yeey

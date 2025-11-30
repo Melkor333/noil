@@ -1,9 +1,11 @@
+
+use $_this_dir/err.ysh --pick err
 # initialize with an empty "toplevel" stack	
 var contextStack = [{}]
 
 proc push (;context;;block) {
   if (type(context) !== 'Dict') {
-    error "Expected context to be a Dict" (code=3)
+    err "Expected context to be a Dict" (code=3)
   }
 
   call contextStack->append(context)
@@ -11,7 +13,9 @@ proc push (;context;;block) {
     call io->eval(block, in_captured_frame=true)
   }
   call contextStack->pop()
-  return $[_error.code]
+  if failed {
+    err "Eval failed for context $[toJson(context)]" (_error)
+  }
 }
 
 proc set (;named) {

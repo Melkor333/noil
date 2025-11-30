@@ -1,4 +1,4 @@
-Package b {
+Derivation b {
   deps a
   provides b
   build {

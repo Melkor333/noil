@@ -1,0 +1,29 @@
+proc err(_msg;_error=null; ...vars) {
+  var err
+  var stack
+  var msgStack
+  var msg
+  var frame = vm.getDebugStack()
+  if (len(frame) > 2) {
+    setvar frame = frame[-2]
+  } else {
+    setvar frame = frame[-1]
+  }
+    
+  if (_error is not null) {
+    setvar err = _error=>get('code',2)
+    setvar stack = _error=>get('stack',[])
+    setvar msg = _error=>get('message',"")
+    setvar msgStack = _error=>get('msgStack',[])
+    call stack->append(frame)
+    call msgStack->append(_msg)
+  } else {
+    setvar err = 2
+    setvar stack = [frame]
+    setvar msgStack = [_msg]
+    setvar msg = ""
+  }
+  builtin error "$msg $[stack[-1].toString()=>trimEnd()] $_msg $[\n ++ \n]" (code=vars=>get('code', err), stack=stack, msgStack=msgStack)
+}
+
+var __provide__ = :| err |

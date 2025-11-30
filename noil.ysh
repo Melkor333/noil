@@ -3,6 +3,12 @@
 #source --builtin osh/two.sh
 use $LIB_YSH/args.ysh --pick parser parseArgs
 use $_this_dir/ctx.ysh
+use $_this_dir/tmp-store.ysh --pick path
+use $_this_dir/err.ysh --pick err
+
+proc sysinfo() {
+  uname -imo | tr ' ' - | tr '[:upper:]' '[:lower:]'
+}
 
 func parse(filename) {
   read --all (&s) < $filename
@@ -33,10 +39,10 @@ func combine(out, input) {
 
 func evalBlock(block) {
   if (type(block) !== 'Command') {
-    error "Wrong type. need a Command" (code=3)
+    err "Wrong type. need a Command" (code=3)
   }
   _eval (&out) {
-    call eval(block)
+    call io->eval(block)
   }
   return (out)
 }
@@ -44,10 +50,10 @@ func evalBlock(block) {
 proc _hayproc (...args;self, ...args2;;block=null) {
   # not self.parent! current target!
   if (self.parent is not haystack[-1]) {
-    error "$[self.name] is not allowed inside node $[haystack[-1].name]"
+    err "$[self.name] is not allowed inside node $[haystack[-1].name]"
   }
   if (block is null) {
-    error "$[self.name] requires a block argument" (code=2)
+    err "$[self.name] requires a block argument" (code=2)
   }
   var out = block.sourceCode()
   setvar out.type = self.name
@@ -56,10 +62,10 @@ proc _hayproc (...args;self, ...args2;;block=null) {
   ctx emit children (out)
 }
 
-proc Package (name;...args;;block) {
+proc Derivation (name;...args;;block) {
   # not self.parent! current target!
   #if (self.parent is not haystack[-1]) {
-  #  error "$[self.name] is not allowed inside node $[haystack[-1].name]"
+  #  err "$[self.name] is not allowed inside node $[haystack[-1].name]"
   #}
   #call haystack->append(self)
   var out_ = {
@@ -70,15 +76,19 @@ proc Package (name;...args;;block) {
   var c_ = {}
   try {
     ctx push (c_) {
+        setglobal system = $(sysinfo)
         setvar attrs = io->evalToDict(block)
     }
   }
-  if (_error.code !== 0) {
-    return $[_error.code]
+  if failed {
+    err "failed to eval block" (_error)
+    # TODO: sourcecode for a command
+    #err "pushed eval failed for block $[block=>sourceCode()=>get('code_str')]" (_error)
   }
   setvar out_.attrs = attrs
-  setvar out_.lib = c_=>get("lib", [[]])=>flatten()
+  setvar out_.files = c_=>get("files", [[]])=>flatten()
   setvar out_.build = c_=>get("build", null)
+  setvar out_.system = c_=>get("system", $(sysinfo))
   setvar out_.deps = c_=>get("deps", [])=>flatten()
   ctx set (out_)
   #call setVar(name, out_, global=true)
@@ -89,29 +99,29 @@ proc node (node, ...name;;;block=null) {
   try {
     $node @name (;;block)
   }
-  return $[_error.code]
+  if (_error.code !== 0) {
+    err "node block failed" (_error)
+  }
   #call io->eval(^($node @name (;;block);), vars=haystack[-1].definitions)
 }
 
 # TODO: only expose for `Package`
-proc lib (...files) {
-  ctx emit lib (files)
-  #ctx emit children (files)
-  #setglobal lib = files
+proc files (...files) {
+  ctx emit files (files)
 }
 
 proc build (;;;block) {
   ctx set ({build: block})
-  #ctx emit children (files)
-  #setglobal lib = files
 }
 
 setglobal packages = {}
 
-proc PackageFile (name, file) {
+proc DerivationFile (name, file) {
   var b = ^(
     var block_ = parseCommand($(cat $file))
-    Package $name (;;block_)
+    pushd $(dirname $file) >/dev/null
+    Derivation $name (;;block_)
+    popd >/dev/null
   )
   var x = {}
   setvar x[name] = b
@@ -120,17 +130,12 @@ proc PackageFile (name, file) {
 
 proc provides (...files) {
   ctx emit provides (files)
-  #ctx emit children (files)
-  #setglobal lib = files
 }
 
 proc deps (...files) {
   ctx emit deps (files)
-  #ctx emit children (files)
-  #setglobal lib = files
 }
 
-#var _hayNodeProto = Object(null, {__invoke__:_haynode})
 var _hayProcProto = Object(null, {__invoke__:_hayproc})
 var root = Object(null, {name: 'root', definitions: {}, parent:null})
 
@@ -219,8 +224,8 @@ proc _eval (;out;;block=null) {
     }
     call out->setValue(o)
     setglobal evalLevel -= 1
-    if (_error.code !== 0) {
-      return $[_error.code]
+    if failed {
+      err "failure during block eval" (_error)
     }
   }
 }
@@ -239,19 +244,33 @@ proc reset (;node=root) {
 
 var __provide__ = :| eval reset pp node parse evalBlock |
 
-func parseFile(io, file) {
+proc parseFile(;out, file) {
   var code = $(cat $file)
-  var block = parseCommand(code)
-  call io->eval(block)
-  _eval (&t)
-  return (t)
+  try {
+    var block = parseCommand(code)
+  }
+  if failed {
+    err "couldn't parse $file" (_error)
+  }
+  try {
+    call io->eval(block)
+    _eval (&t)
+  }
+  if failed {
+    err "couldn't eval $file" (_error)
+  }
+  call out->setValue(t)
 }
 
 func resolveDeps(tree, package) {
   if (type(tree[package]) === 'Command') {
-    echo parse $package
     #setvar tree[package] = io->eval(tree[package], to_dict=true)
-    _eval (&p;;tree[package])
+    try {
+      _eval (&p;;tree[package])
+    }   
+    if (_error.code !== 0) {
+      err "couldn't eval block package $package" (_error)
+    }
     setvar tree[package] = p
   }
   var deps = [p]
@@ -271,10 +290,11 @@ proc parse {
   } else {
     setvar file = "./definition.ysh"
   }
-  var tree = parseFile(io, file)
+  parseFile (&tree, file)
   = tree
 }
 
+# TODO: _deps should be only deps
 proc _deps {
   parser (&spec) {
     arg package (help="the packagename to find the deps for")
@@ -285,7 +305,7 @@ proc _deps {
   } else {
     setvar file = "./definition.ysh"
   }
-  var tree = parseFile(io, file)
+  parseFile (&tree, file)
   var deps = resolveDeps(tree, arg.package)
   #_eval (tree;;arg.package)
   = deps
