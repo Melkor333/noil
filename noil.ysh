@@ -1,10 +1,14 @@
 #!/usr/bin/env ysh
+
 # Weird name, provides 'log' and 'die'
 #source --builtin osh/two.sh
 use $LIB_YSH/args.ysh --pick parser parseArgs
 use $_this_dir/ctx.ysh
 use $_this_dir/tmp-store.ysh --pick path
 use $_this_dir/err.ysh --pick err
+use $_this_dir/utils.ysh --pick combine flatten
+
+var __provide__ = :| parseFile _eval |
 
 proc sysinfo() {
   uname -imo | tr ' ' - | tr '[:upper:]' '[:lower:]'
@@ -14,27 +18,6 @@ func parse(filename) {
   read --all (&s) < $filename
   var b = parseCommand(s)
   return (b)
-}
-
-func flatten(arr) {
-  var out = []
-  if (type(arr) !== 'List') {
-    return ([arr])
-  }
-  for i in (arr) {
-    if (type(arr) === 'List') {
-      call out->extend(flatten(i))
-    } else {
-      call out->append(i)
-    }
-  }
-  return (out)
-}
-
-func combine(out, input) {
-  for k, v in (input) {
-    setvar out[k] = v
-  }
 }
 
 func evalBlock(block) {
@@ -68,10 +51,10 @@ proc Derivation (name;...args;;block) {
   #  err "$[self.name] is not allowed inside node $[haystack[-1].name]"
   #}
   #call haystack->append(self)
-  var out_ = {
-    name: name,
-    args: args
-  }
+  #var out_ = {
+  #  name: name,
+  #  args: args
+  #}
   var attrs
   var c_ = {}
   try {
@@ -85,12 +68,12 @@ proc Derivation (name;...args;;block) {
     # TODO: sourcecode for a command
     #err "pushed eval failed for block $[block=>sourceCode()=>get('code_str')]" (_error)
   }
-  setvar out_.attrs = attrs
-  setvar out_.files = c_=>get("files", [[]])=>flatten()
-  setvar out_.build = c_=>get("build", null)
-  setvar out_.system = c_=>get("system", $(sysinfo))
-  setvar out_.deps = c_=>get("deps", [])=>flatten()
-  ctx set (out_)
+  #setvar out_.attrs = attrs
+  #setvar out_.input = c_=>get("input", [[]])=>flatten()
+  #setvar out_.builder = c_.builder
+  #setvar out_.system = c_=>get("system", $(sysinfo))
+  #setvar out_.args = c_=>get("args", [])=>flatten()
+  ctx set ({[name]: attrs})
   #call setVar(name, out_, global=true)
 }
 
@@ -222,6 +205,8 @@ proc _eval (;out;;block=null) {
     try {
       ctx push (o;;b)
     }
+    ctx get (&d)
+    = d
     call out->setValue(o)
     setglobal evalLevel -= 1
     if failed {
@@ -241,8 +226,6 @@ proc reset (;node=root) {
     call node.definitions->erase(name)
   }
 }
-
-var __provide__ = :| eval reset pp node parse evalBlock |
 
 proc parseFile(;out, file) {
   var code = $(cat $file)
@@ -311,14 +294,15 @@ proc _deps {
   = deps
 }
 
-parser (&spec) {
-  arg command (help="the command to be executed", default="parse")
-  flag -v --verbose
-  flag -f --file (Str)
-  rest rest
-}
-setglobal arg = parseArgs(spec, ARGV)
-
 if is-main {
+  parser (&spec) {
+    arg command (help="the command to be executed", default="parse")
+    flag -v --verbose
+    flag -f --file (Str)
+    rest rest
+  }
+  setglobal arg = parseArgs(spec, ARGV)
+
   runproc $[arg.command] @[arg.rest]
 }
+

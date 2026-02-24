@@ -1,18 +1,23 @@
 set -ex
 
-./noil.ysh parse
-cd packages/a
-../../noil.ysh parse
-cd ../b
-../../noil.ysh parse
-cd ../c
-../../noil.ysh parse
-
-cd ../..
-./noil.ysh _deps a
-./noil.ysh _deps b
-./noil.ysh _deps c
+# TODO: These are not Derivation but MakeDerivation
+#./noil.ysh parse
+#cd packages/a
+#../../noil.ysh parse
+#cd ../b
+#../../noil.ysh parse
+#cd ../c
+#../../noil.ysh parse
+#
+#cd ../..
+#./noil.ysh _deps a
+#./noil.ysh _deps b
+#./noil.ysh _deps c
 
 ./noil.ysh _deps hello
-
+pushd zb-demo >/dev/null
+../noil.ysh parse
+popd > /dev/null
+# use implicitly definitions.ysh
+./simple-builder.ysh build hello
 echo yeey

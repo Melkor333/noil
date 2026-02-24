@@ -1,0 +1,29 @@
+# Copyright 2025 The zb Authors
+# SPDX-License-Identifier: MIT
+#
+# For `zb build demo/hello.lua#hello`,
+# zb will first look for `_G.hello`, and if that's nil,
+# then it will look for `_G[system].hello`, where system is the current system triple.
+
+# Unix build targets.
+# Required inputs for a derivation: `system`.
+Derivation hello {
+  if (:|
+  		aarch64-apple-macos
+  		aarch64-unknown-linux
+  		x86_64-unknown-linux
+#  		aarch64-unknown-android
+  		|=>indexOf(system) === -1
+     ) {
+    error "$system not supported" (code=4)
+  }
+  # instead of creating a derivation for each system, we deny bad ones.
+  # Does this have caveats in comparison to functional style?
+  var name = "hello.txt";
+  var input = $(path "hello.txt")
+  var builder = "/bin/sh";
+  var system = system;
+  var args = '''
+    -c while read line; do echo "$line"; done < $in > $out
+    '''
+};

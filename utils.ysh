@@ -1,0 +1,28 @@
+#!/usr/bin/env/ysh
+
+# Utilities that should be builtin or stdlib
+
+var __provide__ = :| combine flatten |
+# combine 2 dicts
+func combine(out, input) {
+  for k, v in (input) {
+    setvar out[k] = v
+  }
+}
+
+
+# flatten an array
+func flatten(arr) {
+  var out = []
+  if (type(arr) !== 'List') {
+    return ([arr])
+  }
+  for i in (arr) {
+    if (type(arr) === 'List') {
+      call out->extend(flatten(i))
+    } else {
+      call out->append(i)
+    }
+  }
+  return (out)
+}

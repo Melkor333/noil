@@ -1,0 +1,44 @@
+#!/usr/bin/env ysh
+
+use $_this_dir/noil.ysh --pick parseFile _eval
+use $_this_dir/utils.ysh --pick combine flatten
+use $_this_dir/ctx.ysh
+use $LIB_YSH/args.ysh --pick parser parseArgs
+
+proc build {
+  parser (&spec) {
+    arg package (help="the packagename to find the deps for")
+  }
+  try {
+    call arg=>combine(parseArgs(spec, ARGV))
+  }
+  if (_error.code !== 0) {
+    err "argparse failed" (_error)
+  }
+  if (arg.file is not null) {
+    var file = ARGV[0]
+  } else {
+    setvar file = "./definition.ysh"
+  }
+  parseFile (&tree, file)
+  = io->eval(tree.hello, to_dict=true)
+  _eval (&derivation;; tree[arg.package])
+  = derivation
+  #var deps = resolveDeps(tree, arg.package)
+  # TODO: it's a graph. treat it as graph.
+  #for dep in (deps) {
+  #  = dep
+  #  build (dep)
+  #}
+}
+
+if is-main {
+  parser (&spec) {
+    arg command (help="the command to be executed", default="parse")
+    flag -f --file (Str)
+    rest rest
+  }
+  setglobal arg = parseArgs(spec, ARGV)
+
+  runproc $[arg.command] @[arg.rest]
+}

@@ -1,5 +1,6 @@
-
 #!/usr/bin/env ysh
+
+var __provide__ = :| path |
 
 # A very cheap file store using `mktemp`
 # useful for prototyping/testing
@@ -17,4 +18,3 @@ proc path (filename) {
   write $NOIL_TMPSTORE/$filename
 }
 
-var __provide__ = :| path |
