@@ -1,0 +1,10 @@
+var  pkgs = import <nixpkgs> # var pkgs will be stripped for the derivation
+derivation {
+  name = "simple"
+  builder = "${pkgs.bash}/bin/bash"
+  args = [ $(store ./simple_builder.sh ]
+  gcc = pkgs.gcc
+  coreutils = pkgs.coreutils
+  src = ./simple.c
+  system = builtins.currentSystem
+}
