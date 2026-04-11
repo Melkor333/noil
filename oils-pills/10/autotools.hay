@@ -1,0 +1,30 @@
+# Instead od this function saying
+# "gshive  me the input, I'll merge"
+# we do  the merging as part of the build setup
+# the user only specifies what they merge in!
+# this should(?) mean "less magic"
+
+# inputs can be arguments if there is no default
+inputs pkgs
+outputs { # lazy eval
+  var builder = "${pkgs.oils-for-unix}/bin/ysh"
+  var args = [ ^(store ./builder.sh) ]
+  var setup = ^(store ./setup.sh)
+  with pkgs {
+      var baseInputs = [
+        gnutar
+        gzip
+        gnumake
+        gcc
+        coreutils
+        gawk
+        gnused
+        gnugrep
+        binutils.bintools
+        patchelf
+        findutils
+    ]
+  }
+  var buildInputs = [ ]
+  var system = builtins.currentSystem
+}

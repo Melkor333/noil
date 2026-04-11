@@ -1,0 +1,50 @@
+setglobal ENV.PATH = ""
+
+proc setup-path(...inputs) {
+  for p in @inputs {
+      if (ENV.PATH !== "") {
+        setglobal ENV.PATH = "$p/bin:$[ENV.PATH]"
+      } else {
+        setglobal ENV.PATH = "$p/bin"
+      }
+  }
+}
+
+proc unpack-phase() {
+    tar -xzf $src
+
+    for d in *; do
+    if [ -d "$d" ]; then
+        cd "$d"
+        break
+    fi
+    done
+}
+
+proc configure-phase() {
+    ./configure --prefix=$out
+}
+
+proc build-phase() {
+    make
+}
+
+proc install-phase() {
+    make install
+}
+
+proc fixup-phase() {
+    find $out -type f -exec patchelf --shrink-rpath '{}' \; -exec strip '{}' \; 2>/dev/null
+}
+
+var phases = :|
+    configure-phase
+    build-phase
+    install-phase
+    fixup-phase
+|
+proc genericBuild() {
+  for p in @phases {
+    runproc $p
+  }
+}

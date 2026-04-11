@@ -1,0 +1,23 @@
+# set defaults with a block
+inputs {
+  default <nixpkgs> (&pkgs)
+  # `default` checks if the var is null before import
+  # to ensure the `pkgs` resolves correctly
+  default ./autotools.nix (&auto, pkgs)
+
+  # defined as an input, to be overwritten?!
+  # Can't be a higher layer 
+  # # TODO: doea inherit mean it's variables are available to the output?
+  # #       In which case, we might want
+  # #       inherit ({auto})
+  # #       and then in the output we can do `input.auto`
+  inherit (auto) 
+}
+# Outputs can just be a dict if nothing is evaled
+# the proc `outputs` will generate a dict anyway
+var outputs = {
+  # we don't "wrap" functions like nix does.
+  # instead we do dixt merging with the stack
+  name: "hello"
+  src: ^(store ./hello-2.12.1.tar.gz)
+}
