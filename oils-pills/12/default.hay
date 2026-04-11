@@ -1,0 +1,2 @@
+load ./hello.hay (&hello)
+load ./graphviz.hay (&graphviz)

@@ -1,0 +1,20 @@
+# set defaults with a block
+inputs {
+  default <nixpkgs> (&pkgs)
+  # `default` checks if the var is null and does lazy import
+  # to ensure the `pkgs` resolves correctly
+  default ./autotools.hay (&auto, pkgs)
+  # alt: default auto ./autotools.hay (pkgs)
+
+  # defined as an input, to be overwritable?!
+  inherit (auto) 
+}
+
+# Outputs can just be a dict if nothing is evaled
+# the proc `outputs` will generate a dict anyway
+var outputs = {
+  # we don't "wrap" functions like nix does.
+  # instead we do dixt merging with the stack
+  name: "hello"
+  src: ^(store ./hello-2.12.1.tar.gz)
+}
